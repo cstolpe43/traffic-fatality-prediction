@@ -1,6 +1,6 @@
 # Predicting US Traffic Fatalities: A Machine Learning Approach to Highway Safety
 
-A supervised machine learning project applying Logistic Regression and Random Forest classifiers to the NHTSA Fatality Analysis Reporting System (FARS) dataset to predict fatal crash outcomes and identify the conditions most strongly associated with traffic fatalities.
+A supervised machine learning project applying Logistic Regression and Random Forest classifiers to the NHTSA Fatality Analysis Reporting System (FARS) dataset to predict which drivers involved in fatal crashes are themselves fatally injured, and to identify the conditions most strongly associated with driver deaths.
 
 ---
 
@@ -12,7 +12,22 @@ The project follows the full CRISP-DM lifecycle — from business understanding 
 
 ---
 
-## Key Results
+## Status: data-coding fixes (November 2026)
+
+After the original submission, several data-coding problems were found and fixed in the notebooks:
+
+- **Alcohol:** `ALC_RES` is stored in thousandths with 995–999 as status codes. The original `ALC_RES >= 0.08` check flagged nearly every driver with any reading — including "test not given" — as alcohol-positive. Now BAC ≥ 0.08 means `80 <= ALC_RES <= 940`.
+- **Rural/urban:** now taken from `RUR_URB`. The original flag came from `FUNC_SYS`, which is road class (Interstate … local), not rural/urban.
+- **Leakage:** `FATALS` (deaths in the crash) and `ALC_TESTED` are only known after the outcome and were removed as model inputs.
+- **Unknown codes:** "not reported" / "unknown" codes (98, 99, etc.) are now treated as missing instead of as real values. `INJ_SEV` 6 and 9 are dropped instead of counted as non-fatal.
+- **Logistic regression** now one-hot encodes category codes (state, weather, restraint use…).
+- **SHAP** notebook works with current `shap` versions.
+
+**The results, SHAP ranking and findings below are from the original May 2026 submission and have not yet been re-run with these fixes.** Expect them to change.
+
+---
+
+## Key Results (original submission)
 
 | Metric | Logistic Regression | Random Forest |
 |---|---|---|
@@ -26,7 +41,7 @@ The Random Forest model was designated champion, outperforming Logistic Regressi
 
 ---
 
-## SHAP Feature Importance
+## SHAP Feature Importance (original submission)
 
 SHAP (SHapley Additive exPlanations) values were computed on a 2,000-record sample of the 2016 validation dataset using the TreeExplainer method to provide a theoretically rigorous measure of individual feature contributions.
 
@@ -49,11 +64,11 @@ Restraint use was the dominant predictor with a SHAP value nearly double that of
 
 ## Dataset
 
-- **Source:** [US Traffic Fatality Records — Kaggle (NHTSA FARS)](https://www.kaggle.com/datasets/usdot/nhtsa-traffic-fatalities)
-- **Coverage:** 2015–2016 FARS fatal crash census
-- **Records:** 101,562 driver-level records after filtering and joining accident, vehicle, and person tables
-- **Train/Validation Split:** 2015 (49,163 records) / 2016 (52,399 records) — temporal split to prevent data leakage
-- **Target Variable:** Binary fatal injury indicator (INJ_SEV recoded: fatal = 1, all other severity levels = 0)
+- **Source:** [NHTSA FARS downloads](https://www.nhtsa.gov/file-downloads?p=nhtsa/downloads/FARS/) (also mirrored on [Kaggle](https://www.kaggle.com/datasets/usdot/nhtsa-traffic-fatalities)); see `data/README.md` for setup
+- **Coverage:** 2015–2016 FARS fatal crash census — every record comes from a crash in which at least one person died
+- **Records (original run):** 101,562 driver-level records after joining the accident and person tables and keeping drivers; slightly fewer after dropping unknown injury severity
+- **Train/Validation Split:** 2015 / 2016 — temporal split to simulate predicting a future year
+- **Target Variable:** Was the driver fatally injured? (INJ_SEV 4 = 1, other known levels = 0; codes 6 and 9 dropped)
 - **License:** US Government Open Data
 
 ---
@@ -62,8 +77,8 @@ Restraint use was the dominant predictor with a SHAP value nearly double that of
 
 - **Language:** Python 3.x
 - **Environment:** Jupyter Notebook
-- **Libraries:** pandas, NumPy, scikit-learn, matplotlib, SHAP, imbalanced-learn
-- **Models:** Logistic Regression (LBFGS solver, L2 regularization), Random Forest (200 trees, max depth 12)
+- **Libraries:** pandas, NumPy, scikit-learn, matplotlib, SHAP (see `requirements.txt`)
+- **Models:** Logistic Regression (one-hot encoded categories, LBFGS solver, L2 regularization), Random Forest (200 trees, max depth 12)
 - **Interpretability:** SHAP TreeExplainer
 
 ---
@@ -74,7 +89,8 @@ Restraint use was the dominant predictor with a SHAP value nearly double that of
 traffic-fatality-prediction/
 │
 ├── data/
-│   └── README.md               # Data source instructions (data not included due to size)
+│   ├── README.md               # Where to download FARS and how to name the files
+│   └── raw/                    # Raw FARS CSVs go here (not in git)
 │
 ├── notebooks/
 │   ├── 01_data_profiling.ipynb
@@ -84,32 +100,40 @@ traffic-fatality-prediction/
 │   └── 05_shap_analysis.ipynb
 │
 ├── outputs/
-│   ├── figures/                # All charts and visualizations
-│   └── models/                 # Saved model artifacts
+│   └── figures/                # Charts, created when the notebooks run (not in git)
 │
 ├── reports/
-│   └── final_report.pdf        # Full capstone report
+│   └── final_report.pdf        # Full capstone report (original submission)
 │
+├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Key Findings
+## How to Run
 
-1. **Restraint use is the single most important modifiable risk factor.** Its SHAP value of 0.1845 dwarfs every other predictor, confirming that seatbelt compliance programs have the highest return on investment for highway safety agencies.
-
-2. **Alcohol involvement is the second most important predictor cluster.** Combined SHAP contribution of 0.1449 across two alcohol features; approximately 26% of crashes involved at least one legally impaired driver.
-
-3. **Geographic concentration is extreme.** The top five states (TX, CA, FL, GA, NC) account for over 36% of all fatal crash deaths, providing a clear basis for risk-stratified federal safety investment.
-
-4. **Temporal risk is non-uniform.** Fatal crashes peak between 3–5 PM and again midnight–3 AM, supporting time-targeted enforcement deployment strategies.
-
-5. **Rural settings carry elevated risk** independent of other factors (SHAP: 0.0329), reflecting higher speeds, fewer divided highways, and longer EMS response times.
+1. Install Python 3.10+ and the libraries: `pip install -r requirements.txt`
+2. Download the FARS 2015 and 2016 files into `data/raw/` as described in `data/README.md`.
+3. Open Jupyter from the `notebooks/` folder (`jupyter notebook`) and run the notebooks in order, 01 through 05. Notebook 02 creates the prepared datasets the later notebooks use.
 
 ---
 
-## Policy Recommendations
+## Key Findings (original submission — to be re-checked after the fixes above)
+
+1. **Restraint use is the single most important modifiable risk factor.** Its SHAP value of 0.1845 dwarfs every other predictor, confirming that seatbelt compliance programs have the highest return on investment for highway safety agencies.
+
+2. **Alcohol involvement is the second most important predictor cluster.** Combined SHAP contribution of 0.1449 across two alcohol features; approximately 26% of crashes involved at least one legally impaired driver. *(The original alcohol feature was mis-coded; see Status above.)*
+
+3. **Geographic concentration is extreme.** The top five states (TX, CA, FL, GA, NC) account for over 36% of fatally injured drivers, providing a clear basis for risk-stratified federal safety investment.
+
+4. **Temporal risk is non-uniform.** Fatal crashes peak between 3–5 PM and again midnight–3 AM, supporting time-targeted enforcement deployment strategies.
+
+5. **Rural settings carry elevated risk** independent of other factors (SHAP: 0.0329), reflecting higher speeds, fewer divided highways, and longer EMS response times. *(The original rural flag was derived from road class, not the rural/urban field; see Status above.)*
+
+---
+
+## Policy Recommendations (original submission)
 
 - Prioritize federal advocacy for primary enforcement seatbelt laws in the 17 states currently limited to secondary enforcement
 - Deploy DUI checkpoints concentrated in the midnight–3 AM window rather than distributed uniformly across overnight hours
